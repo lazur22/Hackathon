@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ordem de Serviço digital</title>
+<link rel="stylesheet" href="/web/tema.css">
+<style>
+  body{background:#e9edf5;color:#111}
+  .folha{max-width:820px;margin:1rem auto;background:#fff;color:#111;padding:1.6rem 1.8rem;border-radius:6px;box-shadow:0 4px 24px #0003}
+  .folha h1{font-size:1.25rem;margin:0} .folha h2{font-size:.95rem;text-transform:uppercase;letter-spacing:.04em;color:#0b3b7a;border-bottom:2px solid #0b3b7a;padding-bottom:.15rem;margin:1.1rem 0 .4rem}
+  .cab{display:flex;justify-content:space-between;gap:1rem;border-bottom:3px solid #0b3b7a;padding-bottom:.6rem;align-items:flex-start}
+  .grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.3rem 1rem;font-size:.92rem} .grade b{color:#333}
+  .folha table{font-size:.85rem} .folha th{color:#333;background:#eef2f9} .folha td,.folha th{border-bottom:1px solid #d6dce8}
+  .sel{font:.7rem/1.3 ui-monospace,Consolas,monospace;word-break:break-all;color:#444;margin-top:1rem;border-top:1px dashed #999;padding-top:.5rem}
+  .pend{background:#fff3df;border:1px solid #e0a44a;padding:.4rem .6rem;border-radius:6px;margin:.3rem 0;font-size:.9rem}
+  .ok{color:#0a7a45;font-weight:700} .alerta2{color:#b42318;font-weight:700}
+  .fotos img{max-width:180px;max-height:140px;border:1px solid #bbb;margin:.2rem;border-radius:4px}
+  .barra-topo{max-width:820px;margin:1rem auto 0;display:flex;gap:.6rem;flex-wrap:wrap}
+  .folha .qual{display:flex;gap:.5rem;flex-wrap:wrap;font-size:.82rem}
+  .folha .qual span{border:1px solid #bbb;border-radius:99px;padding:0 .5rem}
+  @media print{body{background:#fff}.barra-topo{display:none}.folha{box-shadow:none;margin:0;max-width:none;padding:0}}
+</style>
+</head>
+<body>
+<div class="barra-topo"><button onclick="print()">🖨️ Imprimir / salvar PDF</button><button class="sec" onclick="history.length>1?history.back():close()">← Voltar</button></div>
+<main class="folha" id="os" aria-live="polite"><p>Carregando…</p></main>
+<script src="/web/api.js"></script>
+<script>
+const { esc, dur } = SJP;
+const fdt = iso => iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const ROT = { patrimonio_informado: "patrimônio informado", local_informado: "local informado", contato_informado: "contato informado", descricao_do_servico: "descrição do serviço", foto: "foto anexada", confirmacao_do_demandante: "confirmação do solicitante" };
+const id = location.pathname.split("/").filter(Boolean).pop();
+const L = (rot, v) => v ? `<div><b>${rot}:</b> ${esc(v)}</div>` : `<div><b>${rot}:</b> <span style="color:#999">não informado</span></div>`;
+async function blobUrl(url) { const r = await fetch(url, { headers: { Authorization: "Bearer " + SJP.st.token } }); if (!r.ok) throw new Error("foto indisponível"); return URL.createObjectURL(await r.blob()); }
+(async () => {
+  if (!SJP.st.token) { document.getElementById("os").innerHTML = '<p>Entre primeiro no <a href="/web/">painel</a> e abra a OS novamente.</p>'; return; }
+  try {
+    const o = await SJP.get(`/api/v1/tarefas/${id}/os`);
+    const q = o.qualidade_do_registro, w = o.quando, p = o.quem;
+    document.title = "OS " + o.numero;
+    document.getElementById("os").innerHTML = `
+    <div class="cab"><div><h1>PREFEITURA MUNICIPAL DE SÃO JOSÉ DOS PINHAIS</h1><div style="font-size:.85rem">Ordem de Serviço <b>${esc(o.natureza)}</b> · SIMOT</div></div>
+      <div style="text-align:right"><div style="font-size:1.4rem;font-weight:800">OS ${esc(o.numero)}</div><div>${SJP.chip ? "" : ""}Situação: <b>${esc((SJP.STATUS[o.status] || ["", o.status])[1])}</b></div></div></div>
+
+    <h2>Quando?</h2><div class="grade">
+      <div><b>Aberta em:</b> ${fdt(w.aberta_em)}</div><div><b>Atribuída:</b> ${fdt(w.atribuida_em)}</div>
+      <div><b>Atendimento iniciado:</b> ${fdt(w.iniciada_em)}</div><div><b>Serviço concluído:</b> ${fdt(w.concluida_em)}</div>
+      <div><b>Confirmada pelo solicitante:</b> ${fdt(w.resolvida_em)}</div>
+      <div><b>Tempo de reparo (MTTR desta OS):</b> ${w.tempo_de_reparo_min != null ? dur(w.tempo_de_reparo_min) : "—"}</div></div>
+
+    <h2>Quem?</h2><div class="grade">
+      ${L("Solicitante", p.solicitante)}${L("Contato / ramal", p.contato)}${L("Secretaria", p.secretaria)}${L("Unidade", p.unidade)}${L("Local", p.local)}${L("Endereço", p.endereco)}
+      ${L("Aberta por", p.aberta_por)}${L("Encaminhada para", p.encaminhada_para)}
+      <div><b>Executor(es):</b> ${p.executores.map(e => esc(e.nome) + (e.papel === "apoio" ? " (apoio)" : "")).join(", ") || '<span style="color:#999">não atribuído</span>'}</div>
+      ${L("Confirmada por", p.confirmada_por)}</div>
+
+    <h2>Equipamento e problema</h2><div class="grade">${L("Patrimônio (etiqueta)", o.equipamento.patrimonio)}${L("Equipamento", o.equipamento.descricao)}${L("Categoria", o.problema.categoria)}${L("Prioridade", o.problema.prioridade)}</div>
+      <p><b>${esc(o.problema.titulo)}</b><br>${esc(o.problema.descricao) || ""}</p>
+
+    <h2>Como foi atendida?</h2>
+    <table><tr><th style="width:120px">Quando</th><th style="width:160px">Quem</th><th>O que aconteceu</th></tr>
+    ${o.como.map(c => `<tr><td>${fdt(c.quando)}</td><td>${esc(c.quem)}</td><td>${esc(c.o_que)}${c.fotos ? ` <span style="color:#555">📷×${c.fotos}</span>` : ""}</td></tr>`).join("")}</table>
+    ${o.localizacao_no_atendimento?.lat ? `<p style="font-size:.85rem">📍 Atendimento iniciado no local (GPS ${o.localizacao_no_atendimento.lat.toFixed(5)}, ${o.localizacao_no_atendimento.lon.toFixed(5)}).</p>` : ""}
+
+    <h2>O que foi feito?</h2><p>${o.o_que_foi_feito ? esc(o.o_que_foi_feito) : '<span class="alerta2">Ainda não concluída.</span>'}</p>
+
+    <h2>Há pendências?</h2>${o.pendencias.length ? o.pendencias.map(x => `<div class="pend"><b>${x.situacao === "ABERTA" ? "⚠ EM ABERTO" : "Registrada/resolvida"}</b> · ${esc(x.origem === "demandante" ? "informada pelo solicitante" : (SJP.IMP[x.tipo] || x.tipo))} · ${fdt(x.aberta_em)}<br>${esc(x.descricao)}${x.resolucao ? `<br><span class="ok">✔ ${esc(x.resolucao)}</span>` : ""}</div>`).join("") : '<p class="ok">Sem pendências.</p>'}
+
+    <h2>Há fotos?</h2><div class="fotos" id="fotos">${o.fotos.length ? "" : "<p>Nenhuma foto anexada.</p>"}</div>
+
+    <h2>Avaliação do atendimento</h2><p>${o.avaliacao.nota ? `${"★".repeat(o.avaliacao.nota)}${"☆".repeat(5 - o.avaliacao.nota)} ${esc(o.avaliacao.comentario)}` : "Ainda não avaliada."}${o.reaberturas ? ` · Reaberturas: ${o.reaberturas}` : ""}</p>
+
+    <h2>Qualidade do registro</h2><div class="qual">${Object.entries(q.itens).map(([k, v]) => `<span>${v ? "✔" : "✖"} ${esc(ROT[k] || k)}</span>`).join("")}</div>
+    <div class="sel">Selo de integridade (SHA-256 da trilha de auditoria): ${esc(o.selo_integridade)}<br>${o.origem ? `Origem: ${esc(o.origem.sistema)} #${esc(o.origem.id)} · ` : ""}Documento digital — dispensa impressão. Qualquer alteração na trilha muda o selo.</div>`;
+    let carregadas = 0;
+    for (const f of o.fotos) { if ((f.mime || "").startsWith("image/")) { try { const u = await blobUrl(f.url); const i = new Image(); i.src = u; i.alt = f.nome; document.getElementById("fotos").appendChild(i); carregadas++; } catch (e) {} } else { document.getElementById("fotos").insertAdjacentHTML("beforeend", `<p>📎 ${esc(f.nome)}</p>`); } }
+    if (o.fotos.length && !carregadas) document.getElementById("fotos").insertAdjacentHTML("beforeend", `<p>📷 ${o.fotos.length} foto(s) registrada(s), mas o arquivo não está disponível neste ambiente.</p>`);
+  } catch (e) { document.getElementById("os").innerHTML = `<p class="erro">${esc(e.message)}</p>`; }
+})();
+</script>
+</body>
+</html>

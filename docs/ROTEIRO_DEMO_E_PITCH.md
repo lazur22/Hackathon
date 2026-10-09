@@ -9,7 +9,11 @@
 5. **Conclusão e confirmação** (45s): resolver impedimento, concluir; abrir o **link do demandante** (sem login), dar 5★.
 6. **Gamificação** (45s): pontos em duas etapas, extrato explicado, ranking por pessoa/equipe/setor, reiniciar placar preservando histórico.
 7. **Resiliência** (30s): "simular queda" no legado, mudar status, voltar o legado → fila entrega na ordem, sem duplicar.
-8. **Generalidade e soberania** (30s): cadastrar um setor novo em Configuração; mostrar que tudo roda local, sem nuvem.
+8. **OS digital e rota** (60s): abrir uma OS resolvida → 📄 OS digital (quando/quem/como/o que foi feito/pendências/fotos + selo). Em **🗺️ Rotas**, mostrar o técnico com 5 OS em unidades próximas e a economia estimada de km. No celular: "📍 Qual a mais perto de mim?" e, ao concluir, a próxima missão sugerida.
+9. **Assistente que aprende** (45s): perguntar "telefone mudo sem tom" → procedimento + casos parecidos → 👍. Em Indicadores mostrar OS evitadas, MTTR, MTBF e recorrência.
+10. **Generalidade e soberania** (30s): cadastrar um setor novo em Configuração; mostrar que tudo roda local, sem nuvem.
+
+**Dados reais para abrir o pitch** (Help Desk 2026, 10.140 chamados): mediana de 19 h para concluir, mas média de 89 h e 23% acima de 72 h; 35% dos registros sem técnico identificado. Nas OS de amostra: a OS 3368 levou ~1 ano e foi reaberta 2×; várias linhas só dizem "N/D" ou "OS ok".
 
 **Mensagem final**: não trocamos o sistema da prefeitura — damos visibilidade, engajamento e inteligência por cima dele, dentro da lei de soberania de dados.
 

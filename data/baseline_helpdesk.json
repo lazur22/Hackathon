@@ -1,4 +1,44 @@
 {
-  "origem": "placeholder",
-  "aviso": "Sem dados reais carregados. Exporte os chamados do Help Desk (sem dados pessoais) e rode: python scripts/gerar_baseline.py chamados.csv"
+  "origem": "export_helpdesk_agregado",
+  "periodo": "2026-01 a 2026-10",
+  "chamados": 10140,
+  "por_status": {
+    "CONCLUIDO": 9817,
+    "ENCAMINHAR": 261,
+    "CANCELADO": 11,
+    "DEVOLVER": 22,
+    "REABERTO": 11,
+    "EXECUTADO": 18
+  },
+  "por_departamento_responsavel": {
+    "HELP DESK": 6444,
+    "SUPORTE TECNICO": 1705,
+    "TELECOM": 1086,
+    "DATACENTER": 402,
+    "TELEFONIA": 246,
+    "AQUISIÇÕES/ESTOQUE": 151,
+    "FABRICA DE SOFTWARE": 103,
+    "LABORATORIO DE ELETRONICA": 3
+  },
+  "por_mes": {
+    "2026-01": 946,
+    "2026-02": 1495,
+    "2026-03": 1183,
+    "2026-04": 1046,
+    "2026-05": 1394,
+    "2026-06": 1100,
+    "2026-07": 1011,
+    "2026-08": 1006,
+    "2026-09": 888,
+    "2026-10": 71
+  },
+  "horas_ate_conclusao": {
+    "mediana": 18.9,
+    "media": 89.1,
+    "p90": 170.0,
+    "n": 9817
+  },
+  "percentual_conclusao_acima_de_72h": 22.9,
+  "percentual_sem_nome_de_tecnico_no_registro": 35.3,
+  "leitura": "Linha de base REAL do Help Desk antes da plataforma (dados agregados, sem dados pessoais)."
 }

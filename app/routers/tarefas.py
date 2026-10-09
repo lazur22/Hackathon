@@ -16,7 +16,7 @@ from ..db import get_db
 from ..models import Evidencia, Participante, Tarefa, Usuario
 from ..security import exige, tem_perfil, usuario_atual
 from ..serializers import tarefa_detalhe, tarefa_resumo
-from ..services import ai, workflow
+from ..services import chatbot, ai, workflow
 from ..services.erros import ErroNegocio
 
 router = APIRouter(prefix="/api/v1", tags=["Tarefas"])
@@ -112,6 +112,9 @@ class NovaTarefa(BaseModel):
     solicitante_contato: str = ""
     demandante_id: Optional[int] = None
     prioridade: Optional[str] = None
+    patrimonio: str = ""
+    equipamento: str = ""
+    secretaria: str = ""
 
 
 @router.post("/tarefas", status_code=201)
@@ -138,6 +141,7 @@ def analisar_previa(d: Analise, u: Usuario = Depends(exige("atendente", "gestor"
     r = ai.classificar(db, f"{d.titulo}. {d.descricao}", d.unidade_demandante)
     top = r["classificacao"][0]["categoria"] if r["classificacao"] else None
     r["lacunas"] = ai.lacunas(fake, top)
+    r["similares"] = chatbot.similares(db, f"{d.titulo} {d.descricao}", 3)
     return r
 
 

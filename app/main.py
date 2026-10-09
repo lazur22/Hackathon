@@ -9,8 +9,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import BASE_DIR, OUTBOX_INTERVALO_S, SEED_ON_START, UPLOAD_DIR
-from .db import Base, SessionLocal, engine
-from .routers import auth, cadastros, gamificacao, indicadores, integracao, notificacoes, tarefas, validar
+from .db import Base, SessionLocal, engine, garantir_colunas
+from .routers import auth, cadastros, gamificacao, indicadores, integracao, notificacoes, os_rota_chat, tarefas, validar
 from .seed import semear
 from .services import outbox
 from .services.erros import ErroNegocio
@@ -38,6 +38,7 @@ async def lifespan(app: FastAPI):
     (BASE_DIR / "data").mkdir(exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(engine)
+    garantir_colunas()
     if SEED_ON_START:
         with SessionLocal() as db:
             semear(db)
@@ -55,7 +56,7 @@ async def _erro_negocio(_: Request, e: ErroNegocio):
     return JSONResponse({"detail": e.mensagem}, status_code=e.status)
 
 
-for r in (auth, cadastros, tarefas, validar, integracao, gamificacao, indicadores, notificacoes):
+for r in (auth, cadastros, tarefas, validar, integracao, gamificacao, indicadores, notificacoes, os_rota_chat):
     app.include_router(r.router)
 
 
@@ -67,6 +68,11 @@ def saude():
 @app.get("/", include_in_schema=False)
 def inicio():
     return FileResponse(BASE_DIR / "web" / "launcher.html")
+
+
+@app.get("/os/{tarefa_id}", include_in_schema=False)
+def pagina_os(tarefa_id: int):
+    return FileResponse(BASE_DIR / "web" / "os.html")
 
 
 @app.get("/validar/{token}", include_in_schema=False)

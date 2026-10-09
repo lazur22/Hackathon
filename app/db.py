@@ -27,3 +27,23 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def garantir_colunas() -> None:
+    """Migração mínima: adiciona colunas novas em bancos já criados (create_all não altera tabelas existentes)."""
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    with engine.begin() as con:
+        for tabela in Base.metadata.sorted_tables:
+            if not insp.has_table(tabela.name):
+                continue
+            existentes = {c["name"] for c in insp.get_columns(tabela.name)}
+            for col in tabela.columns:
+                if col.name in existentes:
+                    continue
+                tipo = col.type.compile(engine.dialect)
+                padrao = ""
+                if col.default is not None and getattr(col.default, "is_scalar", False):
+                    v = col.default.arg
+                    padrao = f" DEFAULT {int(v) if isinstance(v, bool) else repr(v)}"
+                con.execute(text(f'ALTER TABLE {tabela.name} ADD COLUMN {col.name} {tipo}{padrao}'))

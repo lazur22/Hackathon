@@ -121,6 +121,12 @@ class Tarefa(Base):
     setor_id: Mapped[int] = mapped_column(ForeignKey("setores.id"))            # setor que EXECUTA
     equipe_id: Mapped[Optional[int]] = mapped_column(ForeignKey("equipes.id"), nullable=True)
     local: Mapped[str] = mapped_column(String(250), default="")
+    patrimonio: Mapped[str] = mapped_column(String(40), default="")            # etiqueta do equipamento (como na OS de papel)
+    equipamento: Mapped[str] = mapped_column(String(200), default="")          # categoria/marca/modelo
+    secretaria: Mapped[str] = mapped_column(String(160), default="")
+    local_id: Mapped[Optional[int]] = mapped_column(ForeignKey("locais.id"), nullable=True)
+    lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     unidade_demandante: Mapped[str] = mapped_column(String(200), default="")   # ex.: UPA Afonso Pena
     solicitante_nome: Mapped[str] = mapped_column(String(120), default="")
     solicitante_contato: Mapped[str] = mapped_column(String(80), default="")
@@ -270,4 +276,32 @@ class PushSub(Base):
     endpoint: Mapped[str] = mapped_column(String(600), unique=True)
     p256dh: Mapped[str] = mapped_column(String(200))
     auth: Mapped[str] = mapped_column(String(100))
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)
+
+
+class Local(Base):
+    """Unidades atendidas (e a central). Coordenadas permitem sugerir atendimentos próximos e estimar deslocamento."""
+    __tablename__ = "locais"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(200), unique=True)
+    endereco: Mapped[str] = mapped_column(String(250), default="")
+    secretaria: Mapped[str] = mapped_column(String(160), default="")
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    central: Mapped[bool] = mapped_column(Boolean, default=False)          # base de onde os técnicos saem/voltam
+    aliases: Mapped[list] = mapped_column(JSON, default=list)              # nomes alternativos para casar com texto livre
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ChatConversa(Base):
+    """Cada pergunta ao assistente e se ela evitou abrir uma OS (retroalimentação + métrica de deflexão)."""
+    __tablename__ = "chat_conversas"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    pergunta: Mapped[str] = mapped_column(Text)
+    resposta: Mapped[str] = mapped_column(Text, default="")
+    fontes: Mapped[list] = mapped_column(JSON, default=list)               # [{tarefa_id|kb_id, score}]
+    melhor_score: Mapped[float] = mapped_column(Float, default=0.0)
+    resolveu: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)   # True = não precisou de OS
+    abriu_os: Mapped[bool] = mapped_column(Boolean, default=False)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=agora)

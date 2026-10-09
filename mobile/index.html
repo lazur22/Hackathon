@@ -12,7 +12,7 @@
   body{padding-bottom:84px}
   header.topo{position:sticky;top:0;z-index:10;background:#0a1428ee;border-bottom:1px solid var(--bd);padding:.6rem 1rem;display:flex;gap:.6rem;align-items:center}
   main{padding:1rem;max-width:640px;margin:auto}
-  nav.abas{position:fixed;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(3,1fr);background:var(--bg2);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+  nav.abas{position:fixed;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(4,1fr);background:var(--bg2);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
   nav.abas button{background:transparent;color:var(--fg);border:0;border-radius:0;min-height:60px;font-size:.85rem;display:flex;flex-direction:column;gap:.1rem;align-items:center}
   nav.abas button[aria-current=page]{color:var(--cian);border-top:3px solid var(--cian)}
   .missao{display:block;width:100%;text-align:left;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:16px;padding:.9rem;margin:.6rem 0;min-height:76px}
@@ -90,7 +90,7 @@ async function iniciar() {
   $("#app").innerHTML = `<div id="faixa" class="offline" role="status" hidden></div>
     <header class="topo"><b style="font-size:1.1rem">⭐ Missão SJP</b><span class="sp"></span><button class="sec" id="bSino" style="min-height:44px" aria-label="Notificações">🔔<span id="nN"></span></button><button class="sec" id="bA" aria-label="Aumentar fonte">A+</button></header>
     <main id="cont" tabindex="-1"></main>
-    <nav class="abas" aria-label="Seções">${[["missoes", "🎯", "Missões"], ["ranking", "🏆", "Ranking"], ["perfil", "🙂", "Perfil"]].map(([k, i, t]) => `<button data-a="${k}" ${k === aba ? 'aria-current="page"' : ""}><span aria-hidden="true">${i}</span>${t}</button>`).join("")}</nav>`;
+    <nav class="abas" aria-label="Seções">${[["missoes", "🎯", "Missões"], ["ajuda", "💬", "Ajuda"], ["ranking", "🏆", "Ranking"], ["perfil", "🙂", "Perfil"]].map(([k, i, t]) => `<button data-a="${k}" ${k === aba ? 'aria-current="page"' : ""}><span aria-hidden="true">${i}</span>${t}</button>`).join("")}</nav>`;
   $("#bA").onclick = SJP.fonte;
   $("#bSino").onclick = abrirSino;
   $$("nav.abas button").forEach(b => b.onclick = () => { aba = b.dataset.a; $$("nav.abas button").forEach(x => x.toggleAttribute("aria-current", x === b)); $$("nav.abas button").forEach(x => x === b ? x.setAttribute("aria-current", "page") : x.removeAttribute("aria-current")); desenhar(); });
@@ -125,6 +125,7 @@ async function desenhar(silencioso) {
   const c = $("#cont"); if (!c) return;
   try {
     if (aba === "missoes") c.innerHTML = await telaMissoes();
+    else if (aba === "ajuda") c.innerHTML = telaAjuda();
     else if (aba === "ranking") c.innerHTML = await telaRanking();
     else c.innerHTML = await telaPerfil();
     ligar();
@@ -136,7 +137,7 @@ async function telaMissoes() {
   catch (e) { if (!e.rede) throw e; ts = JSON.parse(localStorage.getItem("cacheM") || "[]"); }
   const ordem = { EM_ANDAMENTO: 0, BLOQUEADA: 1, ATRIBUIDA: 2, PENDENTE: 3, CONCLUIDA_EXECUTOR: 4 }, pr = { urgente: 0, alta: 1, normal: 2, baixa: 3 };
   ts.sort((a, b) => (ordem[a.status] - ordem[b.status]) || (pr[a.prioridade] - pr[b.prioridade]));
-  return `<h1>Minhas missões</h1>` + (ts.length ? ts.map(t => `<button class="missao" data-id="${t.id}"><b>${esc(t.titulo)}</b>${chip(t.status)} <span class="peq">${SJP.PRIO[t.prioridade]}</span><br><span class="peq mut">📍 ${esc(t.local || t.unidade || "—")}</span></button>`).join("")
+  return `<h1>Minhas missões</h1>` + (ts.length > 1 ? '<button class="grande sec" id="bPerto" style="margin-bottom:.4rem">📍 Qual a mais perto de mim?</button><div id="perto"></div>' : "") + (ts.length ? ts.map(t => `<button class="missao" data-id="${t.id}"><b>${esc(t.titulo)}</b>${chip(t.status)} <span class="peq">${SJP.PRIO[t.prioridade]}</span><br><span class="peq mut">📍 ${esc(t.local || t.unidade || "—")}</span></button>`).join("")
     : '<div class="card"><p>🎉 Nenhuma missão no momento. Você será avisado quando chegar uma nova.</p></div>');
 }
 async function telaRanking() {
@@ -156,6 +157,15 @@ async function telaPerfil() {
 }
 
 function ligar() {
+  const bp = $("#bPerto"); if (bp) bp.onclick = async () => {
+    bp.disabled = true; bp.textContent = "Obtendo localização…";
+    const pos = await new Promise(r => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => r(p.coords), () => r(null), { timeout: 8000, maximumAge: 30000 }) : r(null));
+    try { const r = await SJP.get("/api/v1/rota/proximas" + (pos ? `?lat=${pos.latitude}&lon=${pos.longitude}` : "")); $("#perto").innerHTML = listaPerto(r, pos ? "" : "Sem GPS: usando a central como ponto de partida. "); }
+    catch (e) { $("#perto").innerHTML = `<p class="erro">${esc(e.message)}</p>`; }
+    bp.disabled = false; bp.textContent = "📍 Qual a mais perto de mim?";
+    $$("#perto .missao").forEach(b => b.onclick = () => detalhe(b.dataset.id));
+  };
+  ligarAjuda();
   $$(".missao").forEach(b => b.onclick = () => detalhe(b.dataset.id));
   $$(".medalhaB").forEach(b => b.onclick = () => toast(b.dataset.m, 5000));
   const e = $("#bExt"); if (e) e.onclick = async () => {
@@ -163,6 +173,46 @@ function ligar() {
     modal("Extrato dos pontos", pts.length ? pts.map(p => `<p style="margin:.4rem 0"><b class="${p.pontos < 0 ? "erro" : "okc"}">${p.pontos > 0 ? "+" : ""}${p.pontos}</b> ${esc(p.explicacao)}<br><span class="peq mut">${fdt(p.em)}</span></p>`).join("") : "<p>Sem pontos ainda.</p>");
   };
   const s = $("#bSair"); if (s) s.onclick = () => { SJP.sair(); location.reload(); };
+}
+
+function listaPerto(r, aviso) {
+  if (!r.sequencia.length) return `<div class="card"><p>${esc(r.dica)}</p></div>`;
+  return `<div class="card" style="margin:.5rem 0"><p class="peq mut">${esc(aviso)}Ordem sugerida (urgência pesa, depois a distância) — ${esc(r.dica)}</p>${r.sequencia.map((x, i) =>
+    `<button class="missao" data-id="${x.id}"><b>${i + 1}. ${esc(x.titulo)}</b><span class="peq">${SJP.PRIO[x.prioridade]} · ${x.km} km · ~${x.min} min</span><br><span class="peq mut">📍 ${esc(x.local || "—")}</span></button>
+     ${x.lat != null ? `<a class="peq" href="geo:${x.lat},${x.lon}?q=${x.lat},${x.lon}" style="display:inline-block;padding:.2rem .5rem">🧭 abrir no app de mapas</a>` : ""}`).join("")}
+    ${r.sem_localizacao.length ? `<p class="peq mut">Sem local cadastrado: ${r.sem_localizacao.map(x => esc(x.titulo)).join(", ")}</p>` : ""}</div>`;
+}
+async function sugerirProxima(id) {
+  try {
+    const r = await SJP.get("/api/v1/rota/proximas?de_tarefa=" + id);
+    if (!r.sequencia.length) return;
+    modal("Próxima missão perto de você", listaPerto(r, "A partir do local que você acabou de atender. "));
+    $$("#mCorpo .missao").forEach(b => b.onclick = () => { $("#modal").close(); detalhe(b.dataset.id); });
+  } catch (e) { /* sem rota sugerida: segue o fluxo normal */ }
+}
+
+// ---------------------------------------------------------- ajuda (assistente de suporte)
+function telaAjuda() {
+  return `<h1>💬 Ajuda do técnico</h1><p class="peq mut">Pergunte como resolver um problema. Eu busco procedimentos e casos parecidos já resolvidos pela equipe. Roda no servidor da prefeitura.</p>
+   <div id="chatMsgs" aria-live="polite" style="min-height:120px"></div>
+   <form id="chatF" class="row" style="flex-wrap:nowrap;margin-top:.6rem"><input id="chatI" placeholder="Ex.: ramal mudo, sem tom" autocomplete="off" aria-label="Sua pergunta"><button>Enviar</button></form>`;
+}
+function ligarAjuda() {
+  const f = $("#chatF"); if (!f) return;
+  const md = t => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+  f.onsubmit = async e => {
+    e.preventDefault(); const q = $("#chatI").value.trim(); if (q.length < 3) return; $("#chatI").value = ""; const m = $("#chatMsgs");
+    m.insertAdjacentHTML("beforeend", `<p style="text-align:right"><span class="badge" style="color:var(--fg);white-space:normal">${esc(q)}</span></p>`);
+    try {
+      const r = await SJP.post("/api/v1/chat", { mensagem: q });
+      m.insertAdjacentHTML("beforeend", `<div class="card peq" style="margin:.5rem 0">${md(r.resposta)}<p class="mut peq" style="margin:.4rem 0">confiança ${esc(r.confianca)}</p>
+        <div class="row"><button class="ok" data-r="1" style="min-height:40px">👍 Resolveu</button><button class="sec" data-r="0" style="min-height:40px">👎 Não resolveu</button></div></div>`);
+      const card = m.lastElementChild; card.scrollIntoView();
+      card.querySelectorAll("[data-r]").forEach(b => b.onclick = async () => { const ok = b.dataset.r === "1";
+        await SJP.post(`/api/v1/chat/${r.conversa_id}/feedback`, { resolveu: ok, abriu_os: !ok });
+        card.querySelector(".row").innerHTML = ok ? '<span class="okc">✔ Obrigado! O assistente aprendeu com isso.</span>' : '<span>Registrado. Descreva mais detalhes ou fale com o gestor.</span>'; });
+    } catch (er) { m.insertAdjacentHTML("beforeend", `<p class="erro peq">${esc(er.rede ? "Sem conexão com o servidor." : er.message)}</p>`); }
+  };
 }
 
 // ---------------------------------------------------------- detalhe da missão
@@ -198,7 +248,7 @@ async function detalhe(id) {
   if ($("#aAnd")) $("#aAnd").onclick = () => modal("Registrar andamento", `<label for="tx">O que foi feito?</label><textarea id="tx" name="texto" required></textarea>${arq}`, "Registrar", async fd => {
     await comArq(`/api/v1/tarefas/${id}/andamento`, limparArq(fd)); toast("Andamento registrado."); recarregar(); });
   if ($("#aCon")) $("#aCon").onclick = () => modal("Concluir missão", `<label for="ds">Descreva o que foi entregue</label><textarea id="ds" name="descricao" required></textarea>${arq}<p class="peq mut">O solicitante será convidado a confirmar. Seus pontos finais dependem da confirmação e da nota.</p>`, "Concluir", async fd => {
-    await comArq(`/api/v1/tarefas/${id}/concluir`, limparArq(fd)); toast("Missão concluída! 🎉 Aguardando confirmação."); recarregar(); });
+    await comArq(`/api/v1/tarefas/${id}/concluir`, limparArq(fd)); toast("Missão concluída! 🎉 Aguardando confirmação."); await recarregar(); sugerirProxima(id); });
   if ($("#aImp")) $("#aImp").onclick = () => modal("O que está impedindo?", `<label for="ti">Motivo</label><select id="ti" name="tipo">${Object.entries(SJP.IMP).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select><label for="di">Explique</label><textarea id="di" name="descricao" required></textarea>${arq}<p class="peq mut">Registrar um impedimento justificado não prejudica sua pontuação.</p>`, "Avisar gestor", async fd => {
     await comArq(`/api/v1/tarefas/${id}/impedimento`, limparArq(fd)); toast("Gestor avisado."); recarregar(); });
   if ($("#aApo")) $("#aApo").onclick = () => modal("Pedir apoio", '<label for="ap">Do que você precisa?</label><textarea id="ap" name="texto" required></textarea>', "Pedir", async fd => {

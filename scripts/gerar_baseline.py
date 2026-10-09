@@ -1,29 +1,58 @@
-"""Gera data/baseline_helpdesk.json: números AGREGADOS do Help Desk real (sem nomes, sem texto de chamados).
-Uso: python scripts/gerar_baseline.py caminho/chamados.csv   (colunas: abertura, fechamento, status, setor)
-Sem CSV, grava um PLACEHOLDER explícito (sem números inventados)."""
-import csv, json, sys, statistics as st
+"""Gera data/baseline_helpdesk.json a partir do export do Help Desk (chamadosAAAAMMDD.txt, colunas largura fixa).
+Saída AGREGADA: sem nomes de pessoas, sem texto de chamados. Uso: python scripts/gerar_baseline.py caminho/chamados.txt"""
+import collections, json, statistics as st, sys
 from datetime import datetime
 from pathlib import Path
 
 SAIDA = Path(__file__).resolve().parent.parent / "data" / "baseline_helpdesk.json"
+COLS = ["COD_CHAMADO", "ANO_CHAMADO", "COD_ODD_SOL", "DPTO_SOLICITANTE", "DPTO_RESPONSAVEL", "USUCOD_TECNICO", "USUANOME",
+        "DESCR_STATUS", "DATA_ABERTURA", "DATA_FINAL"]
+
 
 def dt(s):
-    for f in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try: return datetime.strptime(s.strip(), f)
-        except Exception: pass
+    try:
+        return datetime.strptime(s.strip()[:17], "%d.%m.%y %H:%M:%S")
+    except Exception:
+        return None
+
+
+def ler(caminho):
+    bruto = Path(caminho).read_bytes()
+    try:
+        texto = bruto.decode("utf-8")
+    except UnicodeDecodeError:
+        texto = bruto.decode("cp1252", errors="replace")   # export do legado costuma ser Windows-1252
+    linhas = texto.splitlines()
+    pos = [linhas[0].index(c) for c in COLS]
+    for l in linhas[1:]:
+        if l.strip():
+            yield {c: l[pos[i]:(pos[i + 1] if i + 1 < len(pos) else None)].strip() for i, c in enumerate(COLS)}
+
 
 def main():
     if len(sys.argv) < 2:
-        out = {"origem": "placeholder", "aviso": "Sem dados reais carregados. Exporte os chamados do Help Desk (sem dados pessoais) e rode: python scripts/gerar_baseline.py chamados.csv"}
-    else:
-        tempos, status, setores = [], {}, {}
-        for r in csv.DictReader(open(sys.argv[1], encoding="utf-8-sig")):
-            a, f = dt(r.get("abertura", "")), dt(r.get("fechamento", ""))
-            if a and f and f >= a: tempos.append((f - a).total_seconds() / 3600)
-            status[r.get("status", "?")] = status.get(r.get("status", "?"), 0) + 1
-            setores[r.get("setor", "?")] = setores.get(r.get("setor", "?"), 0) + 1
-        out = {"origem": "csv_real_agregado", "chamados": sum(status.values()), "por_status": status, "por_setor": setores,
-               "horas_ate_fechamento": {"mediana": round(st.median(tempos), 1), "p90": round(st.quantiles(tempos, n=10)[-1], 1), "n": len(tempos)} if len(tempos) > 10 else None}
-    SAIDA.parent.mkdir(exist_ok=True); SAIDA.write_text(json.dumps(out, ensure_ascii=False, indent=2)); print("gravado", SAIDA)
+        SAIDA.write_text(json.dumps({"origem": "placeholder", "aviso": "Rode: python scripts/gerar_baseline.py chamados.txt"}, ensure_ascii=False, indent=2))
+        print("placeholder gravado"); return
+    rows = list(ler(sys.argv[1]))
+    horas = []
+    for r in rows:
+        a, f = dt(r["DATA_ABERTURA"]), dt(r["DATA_FINAL"])
+        if r["DESCR_STATUS"] == "CONCLUIDO" and a and f and f >= a:
+            horas.append((f - a).total_seconds() / 3600)
+    por_mes = collections.Counter(dt(r["DATA_ABERTURA"]).strftime("%Y-%m") for r in rows if dt(r["DATA_ABERTURA"]))
+    q = st.quantiles(horas, n=10)
+    sem_tec = sum(1 for r in rows if not r["USUANOME"])
+    out = {
+        "origem": "export_helpdesk_agregado", "periodo": f"{min(por_mes)} a {max(por_mes)}", "chamados": len(rows),
+        "por_status": dict(collections.Counter(r["DESCR_STATUS"] for r in rows)),
+        "por_departamento_responsavel": dict(collections.Counter(r["DPTO_RESPONSAVEL"] for r in rows).most_common(8)),
+        "por_mes": dict(sorted(por_mes.items())),
+        "horas_ate_conclusao": {"mediana": round(st.median(horas), 1), "media": round(st.mean(horas), 1), "p90": round(q[-1], 1), "n": len(horas)},
+        "percentual_conclusao_acima_de_72h": round(100 * sum(1 for h in horas if h > 72) / len(horas), 1),
+        "percentual_sem_nome_de_tecnico_no_registro": round(100 * sem_tec / len(rows), 1),
+        "leitura": "Linha de base REAL do Help Desk antes da plataforma (dados agregados, sem dados pessoais).",
+    }
+    SAIDA.write_text(json.dumps(out, ensure_ascii=False, indent=2)); print(json.dumps(out, ensure_ascii=False, indent=1)[:900])
+
 
 main()

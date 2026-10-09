@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..models import (Evento, Evidencia, Impedimento, Participante, SistemaOrigem, Tarefa, TipoTarefa, Usuario, agora,
                       Equipe)
-from . import ai, gamification, outbox
+from . import ai, gamification, geo, outbox
 from .erros import Duplicada, ErroNegocio
 from .notify import notificar
 
@@ -72,7 +72,8 @@ def criar_tarefa(db: Session, *, titulo: str, descricao: str = "", setor_id: int
                  solicitante_nome: str = "", solicitante_contato: str = "", demandante_id: Optional[int] = None,
                  atendente: Optional[Usuario] = None, prioridade: Optional[str] = None,
                  origem: Optional[SistemaOrigem] = None, origem_id: Optional[str] = None, extra: Optional[dict] = None,
-                 ator_texto: str = "", quando: Optional[datetime] = None, ia: bool = True) -> Tarefa:
+                 ator_texto: str = "", quando: Optional[datetime] = None, ia: bool = True,
+                 patrimonio: str = "", equipamento: str = "", secretaria: str = "") -> Tarefa:
     if not titulo.strip():
         raise ErroNegocio("Informe o título da demanda.", 422)
     if prioridade and prioridade not in PRIORIDADES:
@@ -93,6 +94,7 @@ def criar_tarefa(db: Session, *, titulo: str, descricao: str = "", setor_id: int
         equipe_id = equipe_id or tipo.equipe_padrao_id
     t = Tarefa(titulo=titulo.strip()[:200], descricao=descricao, setor_id=setor_id, tipo_id=tipo_id, equipe_id=equipe_id,
                local=local, unidade_demandante=unidade_demandante, solicitante_nome=solicitante_nome,
+               patrimonio=patrimonio, equipamento=equipamento, secretaria=secretaria,
                solicitante_contato=solicitante_contato, demandante_id=demandante_id,
                atendente_id=atendente.id if atendente else None, prioridade=prioridade or "normal",
                complexidade=tipo.complexidade if tipo else "media", origem_sistema_id=origem.id if origem else None,
@@ -101,6 +103,7 @@ def criar_tarefa(db: Session, *, titulo: str, descricao: str = "", setor_id: int
     db.add(t)
     db.flush()
     db.refresh(t)
+    geo.aplicar_local(db, t)
     if ia:
         t.ia_sugestao = ai.analisar_demanda(db, t)
     registrar(db, t, "criada", atendente,

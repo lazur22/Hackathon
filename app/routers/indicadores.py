@@ -108,3 +108,115 @@ def baseline(u: Usuario = Depends(exige("gestor"))):
 def recorrentes(setor_id: Optional[int] = None, u: Usuario = Depends(exige("gestor")), db: Session = Depends(get_db)):
     return {"itens": ai.impedimentos_recorrentes(db, setor_id),
             "como_funciona": "Agrupa os impedimentos por tipo e extrai termos frequentes das descrições (contagem local, sem LLM)."}
+
+
+# ------------------------------------------------------------------ confiabilidade: MTTR, MTBF, recorrência, avaliações
+def _chave_ativo(t: Tarefa) -> Optional[str]:
+    """'Ativo' = onde o problema ocorre. Preferência: patrimônio (etiqueta); senão local cadastrado; senão texto do local."""
+    if t.patrimonio:
+        return f"pat:{t.patrimonio}"
+    if t.local_id:
+        return f"loc:{t.local_id}"
+    loc = ai._norm(t.local or "").strip()
+    return f"txt:{loc}" if loc and "informado na ligacao" not in loc else None
+
+
+def _jaccard(a: set, b: set) -> float:
+    return len(a & b) / len(a | b) if a and b else 0.0
+
+
+@router.get("/indicadores/confiabilidade")
+def confiabilidade(dias: int = 180, u: Usuario = Depends(exige("gestor")), db: Session = Depends(get_db)):
+    from ..services import chatbot
+    agora_ = agora()
+    q = select(Tarefa).where(Tarefa.criado_em >= agora_ - timedelta(days=dias))
+    if u.setor_id:
+        q = q.where(Tarefa.setor_id == u.setor_id)
+    ts = sorted(db.scalars(q).all(), key=lambda t: t.criado_em)
+
+    # --- OS abertas em X tempo
+    def abertas(d0, d1):
+        return sum(1 for t in ts if agora_ - timedelta(days=d0) <= t.criado_em < agora_ - timedelta(days=d1))
+    a7, a30, ant30 = abertas(7, 0), abertas(30, 0), abertas(60, 30)
+    diario = Counter(t.criado_em.strftime("%Y-%m-%d") for t in ts if t.criado_em >= agora_ - timedelta(days=30))
+
+    # --- MTTR: da abertura até o serviço restabelecido (concluído pelo executor); horas
+    reparo = [(t, _min(t.criado_em, t.concluido_exec_em) / 60) for t in ts if t.concluido_exec_em]
+    mttr_h = [h for _, h in reparo]
+    ativo_h = [_min(t.iniciado_em, t.concluido_exec_em) / 60 for t in ts if t.iniciado_em and t.concluido_exec_em]
+    por_tipo = defaultdict(list)
+    for t, h in reparo:
+        por_tipo[t.tipo.nome if t.tipo else "—"].append(h)
+
+    # --- MTBF: por ativo (patrimônio/local), tempo médio entre falhas consecutivas; dias
+    # (chave inclui o tipo: falhas de natureza diferente no mesmo local não contam como a mesma falha)
+    por_ativo: dict[tuple, list[Tarefa]] = defaultdict(list)
+    for t in ts:
+        k = _chave_ativo(t)
+        if k:
+            por_ativo[(k, t.tipo_id)].append(t)
+    lista_mtbf, intervalos = [], []
+    for (k, _tipo), g in por_ativo.items():
+        if len(g) < 2:
+            continue
+        iv = [(b.criado_em - a.criado_em).total_seconds() / 86400 for a, b in zip(g, g[1:])]
+        intervalos += iv
+        lista_mtbf.append({"ativo": (g[-1].unidade_demandante or g[-1].local or k), "tipo": g[-1].tipo.nome if g[-1].tipo else "—",
+                           "falhas": len(g), "mtbf_dias": round(mean(iv), 1), "ultima_falha": g[-1].criado_em.isoformat() + "Z",
+                           "os": [x.id for x in g]})
+    lista_mtbf.sort(key=lambda x: x["mtbf_dias"])
+
+    # --- recorrência: mesma descrição/necessidade (similaridade) no mesmo ativo/unidade, ou reabertura
+    toks = {t.id: set(ai.tokens(f"{t.titulo} {t.descricao}")) for t in ts}
+    recorrentes, pares = set(), []
+    for i, b in enumerate(ts):
+        for a in ts[:i]:
+            if (b.criado_em - a.criado_em).days > 60:
+                continue
+            mesmo_lugar = (_chave_ativo(a) == _chave_ativo(b) and _chave_ativo(a)) or (a.unidade_demandante and a.unidade_demandante == b.unidade_demandante)
+            if mesmo_lugar and _jaccard(toks[a.id], toks[b.id]) >= 0.25:
+                recorrentes.add(b.id); pares.append((a, b))
+                break
+    top = Counter()
+    exemplos = {}
+    for a, b in pares:
+        k = (b.unidade_demandante or b.local, b.tipo.nome if b.tipo else "—")
+        top[k] += 1; exemplos.setdefault(k, []).append(b.id)
+    reabertas = sum(1 for t in ts if t.reaberturas)
+    recorrencia = {"taxa_percentual": round(100 * len(recorrentes) / len(ts), 1) if ts else 0, "os_recorrentes": len(recorrentes),
+                   "os_reabertas": reabertas,
+                   "ranking": [{"onde": k[0], "tipo": k[1], "repeticoes": n, "os": exemplos[k][:6],
+                                "acao": "Investigar causa-raiz (troca de equipamento/cabo/contrato) em vez de novo reparo."}
+                               for k, n in top.most_common(6)]}
+
+    # --- avaliações
+    notas = [t.avaliacao for t in ts if t.avaliacao]
+    por_eq = defaultdict(list)
+    for t in ts:
+        if t.avaliacao and t.equipe:
+            por_eq[t.equipe.nome].append(t.avaliacao)
+
+    return {
+        "janela_dias": dias, "total": len(ts),
+        "os_abertas": {"ultimos_7_dias": a7, "ultimos_30_dias": a30, "30_dias_anteriores": ant30,
+                       "variacao_percentual": round(100 * (a30 - ant30) / ant30, 1) if ant30 else None,
+                       "por_dia_30d": [{"dia": d, "n": n} for d, n in sorted(diario.items())],
+                       "mede": "Quantidade de OS abertas por período (volume de demanda).", "fonte": "`criado_em` de cada OS."},
+        "mttr": {"horas_media": round(mean(mttr_h), 1) if mttr_h else None, "horas_mediana": round(median(mttr_h), 1) if mttr_h else None,
+                 "horas_so_execucao_media": round(mean(ativo_h), 1) if ativo_h else None, "amostra": len(mttr_h),
+                 "por_tipo": sorted([{"tipo": k, "horas_media": round(mean(v), 1), "n": len(v)} for k, v in por_tipo.items()], key=lambda x: -x["horas_media"])[:6],
+                 "mede": "MTTR = tempo médio de reparo: da abertura da OS até o serviço restabelecido (conclusão informada pelo técnico).",
+                 "fonte": "`criado_em` → `concluido_exec_em`."},
+        "mtbf": {"dias_media": round(mean(intervalos), 1) if intervalos else None, "ativos_com_reincidencia": len(lista_mtbf),
+                 "piores": lista_mtbf[:6],
+                 "mede": "MTBF = tempo médio entre falhas do mesmo ativo (patrimônio ou local) e da mesma natureza. Quanto maior, melhor.",
+                 "fonte": "Intervalo entre `criado_em` de OS consecutivas do mesmo ativo/local e tipo. Precisa de histórico longo para ser confiável."},
+        "recorrencia": {**recorrencia, "mede": "OS que repetem descrição/necessidade no mesmo local nos 60 dias seguintes a outra OS, e OS reabertas.",
+                        "fonte": "Similaridade de texto (Jaccard ≥ 0,25) + mesmo ativo/unidade."},
+        "avaliacoes": {"media": round(mean(notas), 2) if notas else None, "amostra": len(notas),
+                       "distribuicao": {str(n): notas.count(n) for n in range(1, 6)},
+                       "percentual_4_ou_5": round(100 * sum(1 for n in notas if n >= 4) / len(notas), 1) if notas else None,
+                       "por_equipe": sorted([{"equipe": k, "media": round(mean(v), 2), "n": len(v)} for k, v in por_eq.items()], key=lambda x: -x["media"]),
+                       "mede": "Nota (1–5) dada pelo solicitante ao confirmar o atendimento.", "fonte": "Campo `avaliacao`."},
+        "assistente": chatbot.resumo(db, 90),
+    }

@@ -49,6 +49,9 @@ class TarefaEntrada(BaseModel):
     atendente: str = ""
     prioridade: Optional[str] = None
     aberto_em: Optional[datetime] = None
+    patrimonio: str = ""          # etiqueta do equipamento (campo 'Etiqueta' da OS)
+    equipamento: str = ""
+    secretaria: str = ""
     extra: dict = {}
 
 
@@ -72,6 +75,7 @@ def receber(d: TarefaEntrada, s: SistemaOrigem = Depends(sistema_por_chave), db:
             solicitante_nome=d.solicitante.nome, solicitante_contato=d.solicitante.contato,
             demandante_id=demandante.id if demandante and "demandante" in demandante.lista_perfis else None,
             prioridade=d.prioridade, origem=s, origem_id=d.id_origem, extra=d.extra,
+            patrimonio=d.patrimonio, equipamento=d.equipamento, secretaria=d.secretaria,
             ator_texto=f"atendente {d.atendente}" if d.atendente else "", quando=None)
     except Duplicada as dup:
         # Reenvio do mesmo chamado: devolve o registro existente (200), sem criar duplicata.

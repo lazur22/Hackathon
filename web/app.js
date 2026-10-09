@@ -58,6 +58,7 @@ function menuItens() {
   if (SJP.tem("gestor", "atendente")) m.push(["tarefas", "📋 Tarefas"], ["nova", "➕ Nova tarefa"]);
   if (SJP.tem("demandante") && !SJP.tem("gestor", "atendente")) m.push(["minhas", "🙋 Minhas solicitações"]);
   m.push(["gamificacao", "🏆 Gamificação"]);
+  if (SJP.tem("gestor", "atendente")) m.push(["rotas", "🗺️ Rotas"]);
   if (SJP.tem("gestor")) m.push(["indicadores", "📈 Indicadores"], ["ia", "🤖 IA"], ["integracao", "🔌 Integração"], ["cadastros", "⚙️ Configuração"]);
   return m;
 }
@@ -177,12 +178,12 @@ V.tarefa = async id => {
   <div class="detalhe"><div>
    <div class="card"><div class="row"><h1 style="margin:0">#${t.id} · ${esc(t.titulo)}</h1><span class="sp"></span>${chip(t.status)}</div>
     <p>${esc(t.descricao) || '<span class="mut">sem descrição</span>'}</p>
-    <div class="grid g2 peq"><div>📍 <b>Local:</b> ${esc(t.local || "—")}<br>🏢 <b>Unidade:</b> ${esc(t.unidade || "—")}<br>👤 <b>Solicitante:</b> ${esc(t.solicitante || "—")} ${esc(t.solicitante_contato)}</div>
+    <div class="grid g2 peq"><div>📍 <b>Local:</b> ${esc(t.local || "—")}<br>🏢 <b>Unidade:</b> ${esc(t.unidade || "—")}<br>👤 <b>Solicitante:</b> ${esc(t.solicitante || "—")} ${esc(t.solicitante_contato)}${t.secretaria ? `<br>🏛️ <b>Secretaria:</b> ${esc(t.secretaria)}` : ""}${t.patrimonio ? `<br>🏷️ <b>Patrimônio:</b> ${esc(t.patrimonio)} ${esc(t.equipamento)}` : ""}</div>
      <div>🧩 <b>Tipo:</b> ${esc(t.tipo || "—")}<br>👥 <b>Equipe:</b> ${esc(t.equipe || "—")}<br>⚙️ <b>Complexidade:</b> ${esc(t.complexidade)} · <span class="p-${t.prioridade}">${SJP.PRIO[t.prioridade]}</span></div></div>
     ${t.origem ? `<div class="alerta" style="border-color:var(--amb)"><b>🔌 Registro de origem:</b> ${esc(t.origem.nome)} — chamado <b>#${esc(t.origem.id)}</b>. Status espelhado no legado: <b>${esc(t.status_legado)}</b></div>` : '<p class="peq mut">Cadastrada diretamente na plataforma (setor sem sistema próprio).</p>'}
     <p>${t.executores.map(e => `<span class="badge">${e.avatar} ${esc(e.nome)} · ${e.papel === "principal" ? "responsável" : "apoio"}</span>`).join("") || '<span class="mut">sem executor</span>'}</p>
     <div class="row">${a.includes("atribuir") ? '<button id="bAtr">🎯 Atribuir missão</button>' : ""}${a.includes("resolver_impedimento") ? '<button class="ok" id="bImp">✅ Tratar impedimento</button>' : ""}
-     ${a.includes("cancelar") ? '<button class="sec perigo" id="bCan">Cancelar</button>' : ""}<button class="sec viol" id="bRes">🤖 Resumo da execução (IA)</button></div>
+     ${a.includes("cancelar") ? '<button class="sec perigo" id="bCan">Cancelar</button>' : ""}<button class="sec viol" id="bRes">🤖 Resumo da execução (IA)</button><button class="sec" id="bOS">📄 OS digital</button></div>
     <div id="resumo"></div></div>
    ${t.link_validacao ? `<div class="card" style="margin-top:1rem"><h3>⏳ Aguardando a confirmação do demandante</h3><p class="peq mut">Em produção o link vai por SMS/WhatsApp institucional/e-mail, ou o atendente confirma por telefone. Uso único.</p>
      <div class="row"><input readonly value="${esc(t.link_validacao)}" id="lnk" aria-label="Link de validação"><button class="sec" id="bCopia">Copiar</button><a href="${esc(t.link_validacao)}" target="_blank" rel="noopener">abrir como demandante ↗</a></div></div>` : ""}
@@ -193,6 +194,7 @@ V.tarefa = async id => {
    <aside>${iaPainel(t, a)}${t.impedimentos.length ? `<div class="card" style="margin-top:1rem"><h3>⛔ Impedimentos</h3>${t.impedimentos.map(i => `<p class="peq"><b>${SJP.IMP[i.tipo]}</b><br>${esc(i.descricao)}<br>${i.resolvido_em ? `<span class="okc">✔ ${esc(i.resolucao)}</span>` : '<span class="erro">em aberto</span>'}</p>`).join("")}${t.bloqueada_min ? `<p class="peq mut">Tempo bloqueada (SLA congelado): ${dur(t.bloqueada_min)}</p>` : ""}</div>` : ""}
    <div class="card" style="margin-top:1rem"><h3>⏱️ Tempos</h3><p class="peq">Aberta: ${fdt(t.criado_em)}<br>Atribuída: ${fdt(t.atribuido_em)}<br>Iniciada: ${fdt(t.iniciado_em)}<br>Concluída (executor): ${fdt(t.concluido_exec_em)}<br>Resolvida (demandante): ${fdt(t.resolvido_em)}<br>${t.avaliacao ? `Avaliação: ${"★".repeat(t.avaliacao)}${"☆".repeat(5 - t.avaliacao)} ${esc(t.comentario_avaliacao)}` : ""}</p></div></aside></div>`;
   return { html, depois() {
+    $("#bOS")?.addEventListener("click", () => window.open("/os/" + t.id, "_blank"));
     $("#bAtr")?.addEventListener("click", () => atribuirModal(t, ex));
     $("#bImp")?.addEventListener("click", () => impedimentoModal(t, ex));
     $("#bCan")?.addEventListener("click", () => modal("Cancelar tarefa", '<label for="mt">Motivo</label><textarea id="mt" name="motivo" required minlength="3"></textarea>', "Cancelar tarefa", async f => { await SJP.post(`/api/v1/tarefas/${t.id}/cancelar`, { motivo: f.get("motivo") }); rotear(); }));
@@ -273,6 +275,8 @@ V.nova = async () => {
     <div class="grid g2"><div><label for="un">Unidade / departamento</label><input id="un"></div><div><label for="lo">Local (sala, andar, endereço)</label><input id="lo"></div>
     <div><label for="sn">Solicitante</label><select id="sn"><option value="">— informar manualmente / sem cadastro —</option>${dem.map(d => `<option value="${d.id}" data-n="${esc(d.nome)}" data-c="${esc(d.contato)}">${esc(d.nome)}</option>`).join("")}</select></div>
     <div><label for="sc">Ramal / telefone</label><input id="sc"></div>
+    <div><label for="pa">Patrimônio / etiqueta do equipamento</label><input id="pa" inputmode="numeric"></div>
+    <div><label for="sec">Secretaria</label><input id="sec"></div>
     <div><label for="se">Setor responsável</label><select id="se">${ESTR.setores.map(s => `<option value="${s.id}" ${s.id === setorPadrao ? "selected" : ""}>${esc(s.nome)}</option>`).join("")}</select></div>
     <div><label for="tp">Tipo de tarefa (fluxo)</label><select id="tp"></select></div>
     <div><label for="eq">Equipe</label><select id="eq"></select></div>
@@ -285,6 +289,7 @@ V.nova = async () => {
       f("tp").innerHTML = '<option value="">—</option>' + ESTR.tipos.filter(t => t.setor_id === sid && t.ativo).map(t => `<option value="${t.id}">${esc(t.nome)}</option>`).join("");
       f("eq").innerHTML = '<option value="">— definir depois —</option>' + ESTR.equipes.filter(e => e.setor_id === sid).map(e => `<option value="${e.id}">${esc(e.nome)}</option>`).join(""); };
     f("se").onchange = popTipos; popTipos();
+    try { const pre = sessionStorage.getItem("preTitulo"); if (pre) { f("ti").value = pre.slice(0, 120); f("de").value = pre; sessionStorage.removeItem("preTitulo"); f("de").dispatchEvent(new Event("input")); } } catch (e) {}
     f("tp").onchange = () => { const t = ESTR.tipos.find(x => x.id === Number(f("tp").value)); if (t?.equipe_padrao_id) f("eq").value = t.equipe_padrao_id; };
     f("sn").onchange = () => { const o = f("sn").selectedOptions[0]; if (o?.dataset.c && !f("un").value) f("un").value = o.dataset.c; };
     let to; const analisar = () => { clearTimeout(to); to = setTimeout(async () => {
@@ -292,6 +297,7 @@ V.nova = async () => {
       const r = await SJP.post("/api/v1/ia/analisar", { titulo: f("ti").value, descricao: f("de").value, unidade_demandante: f("un").value, local: f("lo").value, solicitante_contato: f("sc").value });
       $("#iaPrev").innerHTML = `<h3>🤖 Assistente do atendente</h3>${r.classificacao.map((c, i) => `<button type="button" class="${i ? "sec" : "viol"}" style="margin:.2rem 0;width:100%;text-align:left" data-c='${JSON.stringify({ e: c.equipe_id, t: c.tipo_id, s: c.setor_id })}'>${i === 0 ? "★ " : ""}${esc(c.rotulo)} → ${esc(c.equipe)} · ${Math.round(c.confianca * 100)}%</button>`).join("")}
         <p class="peq">Prioridade sugerida: <b>${SJP.PRIO[r.prioridade.valor]}</b> <button type="button" class="sec" style="min-height:32px;padding:.1rem .6rem" id="aplP">usar</button><br><span class="mut">${r.prioridade.motivos.map(esc).join("; ")}</span></p>
+        ${r.similares?.length ? `<div class="peq" style="margin:.5rem 0"><b>📚 Casos parecidos já resolvidos</b>${r.similares.map(x => `<p style="margin:.3rem 0"><a href="#/tarefa/${x.tarefa_id}">#${x.tarefa_id} ${esc(x.titulo)}</a><br><span class="mut">${esc(x.solucao)}</span></p>`).join("")}<span class="mut">Se o solicitante ainda está na linha, tente a solução acima antes de abrir a OS.</span></div>` : ""}
         ${r.lacunas.length ? `<div class="alerta peq"><b>Pergunte ao solicitante:</b><ul style="margin:.3rem 0 0;padding-left:1.1rem">${r.lacunas.map(l => `<li>${esc(l.pergunta)}</li>`).join("")}</ul></div>` : '<p class="peq okc">✔ Chamado completo.</p>'}`;
       $$("#iaPrev [data-c]").forEach(b => b.onclick = () => { const c = JSON.parse(b.dataset.c); if (c.s) { f("se").value = c.s; popTipos(); } if (c.t) f("tp").value = c.t; if (c.e) f("eq").value = c.e; toast("Sugestão aplicada (você pode alterar)."); });
       $("#aplP")?.addEventListener("click", () => { f("pr").value = r.prioridade.valor; });
@@ -301,7 +307,7 @@ V.nova = async () => {
       const o = f("sn").selectedOptions[0];
       try { const t = await SJP.post("/api/v1/tarefas", { titulo: f("ti").value, descricao: f("de").value, setor_id: Number(f("se").value), tipo_id: f("tp").value ? Number(f("tp").value) : null,
         equipe_id: f("eq").value ? Number(f("eq").value) : null, local: f("lo").value, unidade_demandante: f("un").value, solicitante_nome: o?.dataset.n || "", solicitante_contato: f("sc").value,
-        demandante_id: f("sn").value ? Number(f("sn").value) : null, prioridade: f("pr").value }); toast("Tarefa registrada ✔"); location.hash = "#/tarefa/" + t.id;
+        demandante_id: f("sn").value ? Number(f("sn").value) : null, prioridade: f("pr").value, patrimonio: f("pa").value, secretaria: f("sec").value }); toast("Tarefa registrada ✔"); location.hash = "#/tarefa/" + t.id;
       } catch (err) { f("er").textContent = err.message; } };
   } };
 };

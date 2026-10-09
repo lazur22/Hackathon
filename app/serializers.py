@@ -62,7 +62,8 @@ def tarefa_resumo(t: Tarefa) -> dict:
 def tarefa_detalhe(t: Tarefa, u: Usuario, incluir_validacao: bool = True) -> dict:
     d = tarefa_resumo(t)
     d.update({
-        "descricao": t.descricao, "solicitante_contato": t.solicitante_contato, "demandante_id": t.demandante_id,
+        "descricao": t.descricao, "solicitante_contato": t.solicitante_contato,
+        "patrimonio": t.patrimonio, "equipamento": t.equipamento, "secretaria": t.secretaria, "lat": t.lat, "lon": t.lon, "demandante_id": t.demandante_id,
         "comentario_avaliacao": t.comentario_avaliacao, "bloqueada_min": t.bloqueada_min,
         "ia_sugestao": t.ia_sugestao,
         "impedimentos": [{"id": i.id, "tipo": i.tipo, "descricao": i.descricao, "aberto_em": iso(i.aberto_em),

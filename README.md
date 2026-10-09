@@ -5,6 +5,10 @@ Hackathon SJP · Soluções Inovadoras para a Gestão Pública (Govtechs). Plata
 - **Integração com o legado** (Help Desk): entrada por API idempotente e saída por fila com reenvio (se o legado cair, nada se perde).
 - **Gamificação transparente**: pontos por complexidade, qualidade (nota do demandante), SLA, colaboração; ranking por pessoa/equipe/setor; período mensal com reinício que preserva histórico; regras editáveis.
 - **IA local** (Naive Bayes + regras; LLM opcional via Ollama): classifica, sugere prioridade, pergunta o que falta, resume e aponta impedimentos recorrentes — sempre como **sugestão** que um humano aceita ou rejeita.
+- **OS digital** (substitui o papel): responde *quando, quem, como, o que foi feito, há pendências, há fotos* — com selo de integridade (hash da trilha) e página para imprimir/salvar em PDF (`/os/<id>`).
+- **Rota por proximidade**: o técnico vê a missão mais perto de onde está e segue direto, sem voltar à central; o gestor vê a economia estimada de km.
+- **Assistente de suporte** (chatbot local): responde com procedimentos e *casos parecidos já resolvidos*; aprende com cada OS concluída e com 👍/👎; mede quantas OS evitou.
+- **Indicadores**: OS abertas por período, recorrência, **MTTR**, **MTBF**, avaliações, OS evitadas pelo assistente e a linha de base **real** do Help Desk (10.140 chamados de 2026, agregados).
 - **Soberania**: nada sai do servidor da prefeitura (Lei 4.715/2025); sem CDN, sem fontes externas, sem APIs de nuvem.
 
 ## Subir (1 comando)
@@ -27,4 +31,4 @@ Sem Docker: `pip install -r requirements.txt && uvicorn app.main:app --port 8000
 `pip install pytest && python -m pytest -q` — jornada completa, permissões, impedimentos, idempotência, fila com reenvio, pontos, período, setor novo, IA.
 
 ## Documentação
-`docs/ARQUITETURA.md` · `docs/DEPLOY.md` · `docs/LICENCAS.md` · `docs/LIMITACOES.md` · `docs/ROTEIRO_DEMO_E_PITCH.md` · `docs/DIVISAO_EQUIPE.md`
+`docs/TESTE_NO_CELULAR.md` · `docs/ARQUITETURA.md` · `docs/DEPLOY.md` · `docs/LICENCAS.md` · `docs/LIMITACOES.md` · `docs/ROTEIRO_DEMO_E_PITCH.md` · `docs/DIVISAO_EQUIPE.md`
