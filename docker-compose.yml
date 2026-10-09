@@ -1,0 +1,27 @@
+# Tudo local: nenhum serviço externo é chamado (Lei Municipal 4.715/2025).
+services:
+  plataforma:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: sqlite:////srv/data/missao.db      # troque por postgresql+psycopg://... em produção
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      LEGADO_WEBHOOK_URL: http://legado:9000/webhook/plataforma
+      SEED_ON_START: "1"                                 # dados fictícios de demonstração; use 0 em produção
+      OLLAMA_URL: ${OLLAMA_URL:-}                        # opcional: LLM local
+    volumes: ["dados:/srv/data", "anexos:/srv/uploads"]
+    restart: unless-stopped
+  legado:                                                # simulador do Help Desk antigo
+    build: .
+    command: ["sh", "-c", "cd legado && uvicorn main:app --host 0.0.0.0 --port 9000"]
+    ports: ["9000:9000"]
+    environment:
+      PLATAFORMA_URL: http://plataforma:8000
+      LEGADO_DB: /srv/dados/legado.db
+    depends_on: [plataforma]
+    volumes: ["legado:/srv/dados"]
+  ollama:                                                # opcional: docker compose --profile ia up
+    image: ollama/ollama
+    profiles: ["ia"]
+    volumes: ["modelos:/root/.ollama"]
+volumes: {dados: {}, anexos: {}, legado: {}, modelos: {}}

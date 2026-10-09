@@ -1,0 +1,4 @@
+{
+  "origem": "placeholder",
+  "aviso": "Sem dados reais carregados. Exporte os chamados do Help Desk (sem dados pessoais) e rode: python scripts/gerar_baseline.py chamados.csv"
+}

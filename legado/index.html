@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Help Desk Municipal — legado simulado</title>
+<style>
+  :root{--bg:#eef1f4;--fg:#1b2430;--card:#fff;--bd:#c9d1da;--azul:#1f4e8c;--ok:#1b6e3c;--err:#a12525;--warn:#8a5a00}
+  *{box-sizing:border-box} body{margin:0;font:16px/1.45 system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--fg)}
+  header{background:#2b3a4a;color:#fff;padding:12px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600} .tag{background:#f0b429;color:#2b2200;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:700}
+  main{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:16px;padding:16px;max-width:1300px;margin:auto}
+  @media(max-width:850px){main{grid-template-columns:1fr}}
+  section{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:14px}
+  h2{font-size:16px;margin:0 0 10px} label{display:block;font-size:13px;margin:8px 0 2px;font-weight:600}
+  input,textarea,select{width:100%;padding:8px;border:1px solid var(--bd);border-radius:6px;font:inherit}
+  button{font:inherit;padding:8px 12px;border-radius:6px;border:1px solid var(--azul);background:var(--azul);color:#fff;cursor:pointer;min-height:40px}
+  button.sec{background:#fff;color:var(--azul)} button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #f0b429;outline-offset:2px}
+  .rapidos{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px} .rapidos button{font-size:13px;padding:4px 8px;min-height:32px}
+  table{width:100%;border-collapse:collapse;font-size:14px} th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--bd);vertical-align:top}
+  .st{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:700;border:1px solid currentColor}
+  .ABERTO{color:#555}.ENCAMINHAR{color:#1f4e8c}.EMEXECUCAO{color:#8a5a00}.EXECUTADO{color:#6b3fa0}.CONCLUIDO{color:#1b6e3c}.REABERTO{color:#a12525}.CANCELADO{color:#777}
+  .env-ok{color:var(--ok)}.env-erro{color:var(--err)} small{color:#556}
+  .queda{display:flex;align-items:center;gap:10px;margin-left:auto} .queda button{background:#fff;color:#2b3a4a;border-color:#fff}
+  .banner{background:#fde8e8;border:1px solid #e3a1a1;color:#7a1818;padding:8px 12px;border-radius:6px;margin-bottom:10px;font-weight:600}
+  ul.hist{margin:4px 0 0 0;padding-left:18px;font-size:13px;color:#334} #msg{margin-top:8px;font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Help Desk Municipal</h1><span class="tag">LEGADO SIMULADO</span>
+  <small style="color:#cfd8e3">Sistema existente da Prefeitura — o atendente cadastra o chamado aqui</small>
+  <div class="queda"><span id="estadoQueda"></span><button id="btnQueda" type="button">Simular queda do legado</button></div>
+</header>
+<main>
+  <section aria-labelledby="h-novo">
+    <h2 id="h-novo">Novo chamado (atendente)</h2>
+    <div class="rapidos" aria-label="Exemplos prontos">
+      <button class="sec" type="button" data-ex="rede">Ponto de rede</button>
+      <button class="sec" type="button" data-ex="fone">Telefone mudo</button>
+      <button class="sec" type="button" data-ex="hdmi">Cabo HDMI</button>
+      <button class="sec" type="button" data-ex="pc">PC não inicia</button>
+    </div>
+    <form id="f">
+      <label for="solicitante">Solicitante (quem ligou)</label>
+      <input id="solicitante" list="dems" required autocomplete="off">
+      <datalist id="dems"><option>Patrícia Souza</option><option>Mariana Lima</option><option>Antônio Pereira</option><option>Lúcia Ferraz</option><option>Renato Gomes</option></datalist>
+      <label for="depto">Unidade / departamento</label><input id="depto">
+      <label for="ramal">Ramal / telefone</label><input id="ramal">
+      <label for="local">Local (sala, andar, endereço)</label><input id="local">
+      <label for="problema">Problema</label><input id="problema" required minlength="3">
+      <label for="descricao">Descrição</label><textarea id="descricao" rows="3"></textarea>
+      <label for="atendente">Atendente</label><input id="atendente" value="Camila (Help Desk)">
+      <p><button type="submit">Registrar chamado</button></p>
+    </form>
+    <div id="msg" role="status" aria-live="polite"></div>
+  </section>
+  <section aria-labelledby="h-lista">
+    <h2 id="h-lista">Chamados no sistema legado</h2>
+    <div id="aviso"></div>
+    <table><thead><tr><th>Nº</th><th>Solicitante / problema</th><th>Status no legado</th><th>Plataforma</th></tr></thead><tbody id="tb"></tbody></table>
+  </section>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const EX={rede:{solicitante:"Patrícia Souza",depto:"UPA Afonso Pena (fictícia)",ramal:"ramal 5521",local:"Sala 3, térreo",problema:"Ponto de rede não funciona",descricao:"Servidora informa que o ponto de rede da sala 3 não funciona e o computador está sem acesso ao sistema."},
+ fone:{solicitante:"Antônio Pereira",depto:"Cemitério Municipal (fictício)",ramal:"3338-4357",local:"Administração, rodovia BR-376",problema:"Telefone mudo",descricao:"Telefone mudo, sem linha, desde ontem."},
+ hdmi:{solicitante:"Renato Gomes",depto:"Unidade de Saúde Borda do Campo (fictícia)",ramal:"98848-7676",local:"Sala de espera",problema:"Cabo HDMI para painel",descricao:"Usuário solicita um cabo HDMI de 15 metros para instalação do painel."},
+ pc:{solicitante:"Patrícia Souza",depto:"UPA Afonso Pena (fictícia)",ramal:"ramal 5521",local:"Consultório 7",problema:"Computador não inicia",descricao:"A máquina apresenta problema ao iniciar, entra em reparo automático. Etiqueta 07101."}};
+document.querySelectorAll("[data-ex]").forEach(b=>b.onclick=()=>{const e=EX[b.dataset.ex];for(const k in e)$("#"+k).value=e[k]});
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function carregar(){
+  const r=await (await fetch("/api/chamados")).json();
+  $("#estadoQueda").textContent=r.fora_do_ar?"⛔ LEGADO FORA DO AR":"● legado no ar";
+  $("#btnQueda").textContent=r.fora_do_ar?"Restabelecer legado":"Simular queda do legado";
+  $("#aviso").innerHTML=r.fora_do_ar?'<div class="banner">Legado simulando indisponibilidade: a plataforma está guardando as atualizações na fila e reenviará quando voltar.</div>':"";
+  $("#tb").innerHTML=r.chamados.map(c=>{
+    const cls=c.status.replace(/\s/g,"");
+    const hist=c.atualizacoes.map(a=>`<li><b>${esc(a.status)}</b> — ${esc(a.texto)} <small>(${esc(a.ator)}, ${esc(a.recebido_em)})${a.extra?" · "+esc(a.extra):""}</small></li>`).join("");
+    return `<tr><td>#${c.id}/${c.ano}</td><td><b>${esc(c.problema)}</b><br><small>${esc(c.solicitante)} · ${esc(c.depto)}</small>${hist?`<ul class="hist">${hist}</ul>`:""}</td>
+      <td><span class="st ${cls}">${esc(c.status)}</span><br><small>${esc(c.atualizado_em)}</small></td>
+      <td>${c.plataforma_id?`tarefa #${c.plataforma_id}<br>`:""}<small class="env-${c.envio==="enviado"?"ok":c.envio==="erro"?"erro":""}">${c.envio} ${esc(c.envio_msg)}</small>
+      ${c.envio==="erro"?`<br><button class="sec" onclick="reenviar(${c.id})">Reenviar</button>`:""}</td></tr>`}).join("")||'<tr><td colspan="4"><small>Nenhum chamado ainda. Use um exemplo ao lado.</small></td></tr>';
+}
+window.reenviar=async id=>{await fetch(`/api/chamados/${id}/reenviar`,{method:"POST"});carregar()};
+$("#f").onsubmit=async e=>{e.preventDefault();
+  const corpo=Object.fromEntries(["solicitante","depto","ramal","local","problema","descricao","atendente"].map(k=>[k,$("#"+k).value]));
+  const r=await fetch("/api/chamados",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(corpo)});
+  const j=await r.json();
+  $("#msg").innerHTML=r.ok?(j.integracao.ok?`✅ Chamado #${j.id} registrado e enviado à plataforma (tarefa #${j.integracao.id_plataforma}).`:`⚠️ Chamado #${j.id} registrado, mas a plataforma não respondeu: ${esc(j.integracao.erro)}`):"Erro ao registrar.";
+  if(r.ok)$("#f").reset();carregar()};
+$("#btnQueda").onclick=async()=>{const r=await (await fetch("/api/chamados")).json();
+  await fetch("/api/simular-queda",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fora_do_ar:!r.fora_do_ar})});carregar()};
+carregar();setInterval(carregar,2500);
+</script>
+</body>
+</html>

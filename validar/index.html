@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Confirmar atendimento — Prefeitura de SJP</title>
+<link rel="stylesheet" href="/web/tema.css">
+<style>main{max-width:560px;margin:auto;padding:1rem}</style>
+</head>
+<body>
+<main id="m" aria-live="polite"><p class="mut">Carregando…</p></main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const token = location.pathname.split("/").filter(Boolean).pop();
+const api = "/api/v1/validar/" + encodeURIComponent(token);
+async function j(r) { let x = null; try { x = await r.json(); } catch (e) {} if (!r.ok) throw new Error(typeof x?.detail === "string" ? x.detail : "Erro " + r.status); return x; }
+
+async function carregar() {
+  try {
+    const t = await j(await fetch(api));
+    $("#m").innerHTML = `<h1>Seu atendimento foi concluído?</h1>
+    <div class="card"><h2>${esc(t.titulo)}</h2><p class="mut peq">📍 ${esc(t.local || t.unidade || "")} · Executado por ${t.executores.map(esc).join(", ") || "equipe"}</p>
+      <h3>O que foi feito</h3><p>${esc(t.entrega || "—")}</p>
+      <div id="ev">${t.evidencias.map(e => `<img class="ev" src="${esc(e.url)}" alt="Foto anexada: ${esc(e.nome)}">`).join("")}</div></div>
+    <form id="f" class="card" style="margin-top:1rem">
+      <fieldset style="border:0;padding:0"><legend><b>O problema foi resolvido?</b></legend>
+        <div class="row"><label style="margin:0"><input type="radio" name="r" value="s" style="width:auto;min-height:0" required> ✅ Sim, resolvido</label>
+        <label style="margin:0"><input type="radio" name="r" value="n" style="width:auto;min-height:0"> ↩️ Não resolveu</label></div></fieldset>
+      <div id="bs" hidden><p style="margin-bottom:.2rem"><b>Como avalia o atendimento?</b></p>
+        <div class="estrelas">${[1, 2, 3, 4, 5].map(n => `<label><input type="radio" name="nota" value="${n}"><span aria-label="${n} de 5">${n}★</span></label>`).join("")}</div></div>
+      <label for="co">Comentário (opcional)</label><textarea id="co"></textarea>
+      <div id="bn" hidden><label for="mp">O que ainda não foi resolvido?</label><textarea id="mp"></textarea></div>
+      <p class="erro" id="er" role="alert"></p><button class="grande">Enviar resposta</button></form>`;
+    $("#f").onchange = () => { const r = $("#f").r.value; $("#bs").hidden = r !== "s"; $("#bn").hidden = r !== "n"; };
+    $("#f").onsubmit = async e => {
+      e.preventDefault(); const ok = $("#f").r.value === "s", nota = $("#f").nota.value;
+      if (ok && !nota) { $("#er").textContent = "Escolha uma nota de 1 a 5."; return; }
+      if (!ok && !$("#mp").value.trim()) { $("#er").textContent = "Conte o que ainda não foi resolvido."; return; }
+      try {
+        const r = await j(await fetch(api, { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resolvido: ok, nota: ok ? Number(nota) : null, comentario: $("#co").value, motivo_pendencia: $("#mp").value }) }));
+        $("#m").innerHTML = `<div class="card"><h1>${ok ? "🏆 Obrigado!" : "↩️ Recebemos"}</h1><p>${esc(r.mensagem)}</p></div>`;
+      } catch (er) { $("#er").textContent = er.message; }
+    };
+  } catch (e) { $("#m").innerHTML = `<div class="card"><h1>Link indisponível</h1><p>${esc(e.message)}</p></div>`; }
+}
+carregar();
+</script>
+</body>
+</html>

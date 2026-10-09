@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a1428">
+<link rel="manifest" href="/m/manifest.json">
+<link rel="icon" href="/m/icone.svg">
+<title>Missão SJP — Executor</title>
+<link rel="stylesheet" href="/web/tema.css">
+<style>
+  body{padding-bottom:84px}
+  header.topo{position:sticky;top:0;z-index:10;background:#0a1428ee;border-bottom:1px solid var(--bd);padding:.6rem 1rem;display:flex;gap:.6rem;align-items:center}
+  main{padding:1rem;max-width:640px;margin:auto}
+  nav.abas{position:fixed;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(3,1fr);background:var(--bg2);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+  nav.abas button{background:transparent;color:var(--fg);border:0;border-radius:0;min-height:60px;font-size:.85rem;display:flex;flex-direction:column;gap:.1rem;align-items:center}
+  nav.abas button[aria-current=page]{color:var(--cian);border-top:3px solid var(--cian)}
+  .missao{display:block;width:100%;text-align:left;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:16px;padding:.9rem;margin:.6rem 0;min-height:76px}
+  .missao b{display:block;font-size:1.05rem;margin-bottom:.25rem}
+  .acoes{display:grid;gap:.6rem;margin:1rem 0}
+  dialog{max-width:94vw}
+  .offline{background:#3a2a05;border:1px solid var(--amb);color:var(--amb);padding:.4rem 1rem;text-align:center;font-weight:700}
+  .xp{display:flex;justify-content:space-between;font-size:.85rem}
+</style>
+</head>
+<body>
+<a class="sr" href="#cont">Ir para o conteúdo</a>
+<div id="app"></div>
+<dialog id="modal"><form method="dialog" id="mForm"><h2 id="mTitulo"></h2><div id="mCorpo"></div>
+  <div class="row" style="margin-top:1rem"><button type="button" class="sec" id="mCancelar">Cancelar</button><span class="sp"></span><button type="submit" id="mOk">Confirmar</button></div></form></dialog>
+<script src="/web/api.js"></script>
+<script>
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const { esc, chip, fdt, toast } = SJP;
+let aba = "missoes", fila = [];
+try { fila = JSON.parse(localStorage.getItem("fila") || "[]"); } catch (e) {}
+
+// ---------------------------------------------------------- modal
+function modal(titulo, corpo, ok, onSubmit) {
+  const d = $("#modal"); $("#mTitulo").textContent = titulo; $("#mCorpo").innerHTML = corpo + '<p class="erro" id="mErro" role="alert"></p>';
+  $("#mOk").textContent = ok || "Confirmar"; $("#mOk").style.display = onSubmit ? "" : "none"; $("#mCancelar").textContent = onSubmit ? "Cancelar" : "Fechar";
+  $("#mCancelar").onclick = () => d.close();
+  $("#mForm").onsubmit = async e => { e.preventDefault(); if (!onSubmit) return d.close(); $("#mOk").disabled = true;
+    try { await onSubmit(new FormData($("#mForm"))); d.close(); } catch (er) { $("#mErro").textContent = er.message; } finally { $("#mOk").disabled = false; } };
+  d.showModal();
+}
+
+// ---------------------------------------------------------- fila offline (apenas ações de texto)
+function salvarFila() { try { localStorage.setItem("fila", JSON.stringify(fila)); } catch (e) {} }
+async function enviar(metodo, caminho, corpo, offlineOk) {
+  try { return await SJP.req(metodo, caminho, corpo); }
+  catch (e) {
+    if (e.rede && offlineOk && !(corpo instanceof FormData)) {
+      fila.push({ metodo, caminho, corpo }); salvarFila(); faixa(); toast("Sem sinal: ação guardada e será enviada quando voltar a conexão.");
+      return null;
+    }
+    throw e;
+  }
+}
+async function drenar() {
+  while (fila.length) {
+    const it = fila[0];
+    try { await SJP.req(it.metodo, it.caminho, it.corpo); fila.shift(); salvarFila(); }
+    catch (e) { if (e.rede) break; fila.shift(); salvarFila(); toast("Uma ação guardada foi recusada: " + e.message); }
+  }
+  faixa(); if (!fila.length && SJP.st.user) desenhar(true);
+}
+function faixa() {
+  const f = $("#faixa"); if (!f) return;
+  const off = !navigator.onLine;
+  f.hidden = !off && !fila.length;
+  f.textContent = off ? `📴 Sem conexão${fila.length ? ` · ${fila.length} ação(ões) a enviar` : ""}` : `⏫ Enviando ${fila.length} ação(ões)…`;
+}
+window.addEventListener("online", () => { faixa(); drenar(); });
+window.addEventListener("offline", faixa);
+
+// ---------------------------------------------------------- login
+function telaLogin(msg = "") {
+  $("#app").innerHTML = `<main style="max-width:420px;margin-top:8vh"><h1>⭐ Missão SJP</h1><p class="mut">Suas missões de campo, no celular.</p>
+    <form id="f" class="card"><label for="l">Usuário</label><input id="l" autocomplete="username" required><label for="s">Senha</label><input id="s" type="password" autocomplete="current-password" required>
+    <p class="erro" role="alert">${esc(msg)}</p><button class="grande">Entrar</button>
+    <p class="peq mut">Demonstração: <button type="button" class="sec" id="demo" style="min-height:36px">usar exec1 / demo123</button></p></form></main>`;
+  $("#demo").onclick = () => { $("#l").value = "exec1"; $("#s").value = "demo123"; };
+  $("#f").onsubmit = async e => { e.preventDefault(); try { await SJP.login($("#l").value.trim(), $("#s").value); iniciar(); } catch (er) { telaLogin(er.message); } };
+}
+
+async function iniciar() {
+  if (!SJP.st.token) return telaLogin();
+  try { SJP.st.user = await SJP.get("/api/v1/auth/eu"); } catch (e) { if (e.rede && SJP.st.user) { /* segue offline com último usuário */ } else return telaLogin(); }
+  $("#app").innerHTML = `<div id="faixa" class="offline" role="status" hidden></div>
+    <header class="topo"><b style="font-size:1.1rem">⭐ Missão SJP</b><span class="sp"></span><button class="sec" id="bSino" style="min-height:44px" aria-label="Notificações">🔔<span id="nN"></span></button><button class="sec" id="bA" aria-label="Aumentar fonte">A+</button></header>
+    <main id="cont" tabindex="-1"></main>
+    <nav class="abas" aria-label="Seções">${[["missoes", "🎯", "Missões"], ["ranking", "🏆", "Ranking"], ["perfil", "🙂", "Perfil"]].map(([k, i, t]) => `<button data-a="${k}" ${k === aba ? 'aria-current="page"' : ""}><span aria-hidden="true">${i}</span>${t}</button>`).join("")}</nav>`;
+  $("#bA").onclick = SJP.fonte;
+  $("#bSino").onclick = abrirSino;
+  $$("nav.abas button").forEach(b => b.onclick = () => { aba = b.dataset.a; $$("nav.abas button").forEach(x => x.toggleAttribute("aria-current", x === b)); $$("nav.abas button").forEach(x => x === b ? x.setAttribute("aria-current", "page") : x.removeAttribute("aria-current")); desenhar(); });
+  SJP.stream(n => { toast("🔔 " + n.titulo); contarN(); if (aba === "missoes" && !$("#modal").open) desenhar(true); });
+  contarN(); faixa(); desenhar(); drenar();
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/m/sw.js", { scope: "/m/" }).catch(() => {});
+}
+
+async function contarN() { try { const r = await SJP.get("/api/v1/notificacoes?somente_nao_lidas=true"); $("#nN").textContent = r.nao_lidas ? " " + r.nao_lidas : ""; } catch (e) {} }
+async function abrirSino() {
+  const r = await SJP.get("/api/v1/notificacoes");
+  const push = ("serviceWorker" in navigator && "PushManager" in window) ? '<button class="sec" id="bPush" style="margin-top:.6rem">📲 Ativar avisos com o app fechado</button><p class="peq mut" id="pushMsg"></p>' : "";
+  modal("Notificações", (r.itens.length ? r.itens.map(n => `<div style="padding:.5rem 0;border-bottom:1px solid var(--bd)"><b>${n.lida ? "" : "● "}${esc(n.titulo)}</b><br><span class="peq mut">${esc(n.corpo)} · ${fdt(n.em)}</span></div>`).join("") : "<p>Nada por aqui.</p>") + push);
+  await SJP.post("/api/v1/notificacoes/lidas"); contarN();
+  const b = $("#bPush"); if (b) b.onclick = ativarPush;
+}
+async function ativarPush() {
+  const m = $("#pushMsg");
+  try {
+    const k = await SJP.get("/api/v1/push/chave"); if (!k.disponivel) throw new Error("Push não configurado no servidor.");
+    if ((await Notification.requestPermission()) !== "granted") throw new Error("Permissão negada.");
+    const reg = await navigator.serviceWorker.ready;
+    const pad = "=".repeat((4 - k.chave_publica.length % 4) % 4), raw = atob((k.chave_publica + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, c => c.charCodeAt(0)) });
+    const j = sub.toJSON(); await SJP.post("/api/v1/push/assinar", { endpoint: j.endpoint, keys: j.keys });
+    m.textContent = "✔ Ativado."; m.className = "peq okc";
+  } catch (e) { m.textContent = "Não foi possível: " + e.message + " (as notificações dentro do app continuam funcionando)."; m.className = "peq erro"; }
+}
+
+// ---------------------------------------------------------- telas
+async function desenhar(silencioso) {
+  const c = $("#cont"); if (!c) return;
+  try {
+    if (aba === "missoes") c.innerHTML = await telaMissoes();
+    else if (aba === "ranking") c.innerHTML = await telaRanking();
+    else c.innerHTML = await telaPerfil();
+    ligar();
+  } catch (e) { c.innerHTML = `<div class="alerta erro" role="alert">${esc(e.message)}</div>`; }
+}
+
+async function telaMissoes() {
+  let ts; try { ts = await SJP.get("/api/v1/tarefas?status=ATRIBUIDA,EM_ANDAMENTO,BLOQUEADA,CONCLUIDA_EXECUTOR,PENDENTE"); localStorage.setItem("cacheM", JSON.stringify(ts)); }
+  catch (e) { if (!e.rede) throw e; ts = JSON.parse(localStorage.getItem("cacheM") || "[]"); }
+  const ordem = { EM_ANDAMENTO: 0, BLOQUEADA: 1, ATRIBUIDA: 2, PENDENTE: 3, CONCLUIDA_EXECUTOR: 4 }, pr = { urgente: 0, alta: 1, normal: 2, baixa: 3 };
+  ts.sort((a, b) => (ordem[a.status] - ordem[b.status]) || (pr[a.prioridade] - pr[b.prioridade]));
+  return `<h1>Minhas missões</h1>` + (ts.length ? ts.map(t => `<button class="missao" data-id="${t.id}"><b>${esc(t.titulo)}</b>${chip(t.status)} <span class="peq">${SJP.PRIO[t.prioridade]}</span><br><span class="peq mut">📍 ${esc(t.local || t.unidade || "—")}</span></button>`).join("")
+    : '<div class="card"><p>🎉 Nenhuma missão no momento. Você será avisado quando chegar uma nova.</p></div>');
+}
+async function telaRanking() {
+  const r = await SJP.get("/api/v1/gamificacao/ranking?escopo=individual");
+  const eu = SJP.st.user.id, max = Math.max(1, ...r.itens.map(i => i.pontos));
+  return `<h1>🏆 Ranking</h1><p class="mut peq">${esc(r.periodo.nome)}</p>` + r.itens.map(i => `<div class="card" style="margin:.5rem 0;${i.id === eu ? "border-color:var(--amb)" : ""}"><div class="row"><b>${i.posicao}º ${esc(i.avatar || "")} ${esc(i.nome)}${i.id === eu ? " (você)" : ""}</b><span class="sp"></span><b>${i.pontos} pts</b></div><div class="barra"><i style="width:${Math.round(100 * Math.max(0, i.pontos) / max)}%"></i></div></div>`).join("");
+}
+async function telaPerfil() {
+  const p = await SJP.get("/api/v1/gamificacao/eu"), n = p.nivel;
+  return `<h1>${esc(p.usuario.avatar || "🙂")} ${esc(p.usuario.nome)}</h1>
+   <div class="card"><b>Nível ${n.nivel} — ${esc(n.nome)}</b><div class="xp"><span>${n.xp} XP</span><span>${n.proximo_xp ? "próx.: " + n.proximo_xp : "máx."}</span></div>
+   <div class="barra" role="progressbar" aria-valuenow="${Math.round(n.progresso * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(n.progresso * 100)}%"></i></div>
+   <p>${p.pontos_periodo} pontos em ${esc(p.periodo.nome)}${p.posicao ? ` · ${p.posicao}º lugar` : ""}</p></div>
+   <h2 style="margin-top:1rem">Medalhas</h2><div class="row">${p.catalogo_conquistas.map(c => `<button class="medalhaB sec" data-m="${esc(c.nome + " — " + c.descricao + (c.obtida ? "" : " (bloqueada)"))}" style="font-size:1.8rem;min-width:64px;${c.obtida ? "" : "filter:grayscale(1);opacity:.5"}" aria-label="${esc(c.nome)}${c.obtida ? "" : ", bloqueada"}">${c.icone}</button>`).join("")}</div>
+   <button class="sec grande" id="bExt" style="margin-top:1rem">Como ganhei meus pontos</button>
+   <button class="sec grande" id="bSair" style="margin-top:.6rem">Sair</button>`;
+}
+
+function ligar() {
+  $$(".missao").forEach(b => b.onclick = () => detalhe(b.dataset.id));
+  $$(".medalhaB").forEach(b => b.onclick = () => toast(b.dataset.m, 5000));
+  const e = $("#bExt"); if (e) e.onclick = async () => {
+    const pts = await SJP.get("/api/v1/gamificacao/pontos?limite=30");
+    modal("Extrato dos pontos", pts.length ? pts.map(p => `<p style="margin:.4rem 0"><b class="${p.pontos < 0 ? "erro" : "okc"}">${p.pontos > 0 ? "+" : ""}${p.pontos}</b> ${esc(p.explicacao)}<br><span class="peq mut">${fdt(p.em)}</span></p>`).join("") : "<p>Sem pontos ainda.</p>");
+  };
+  const s = $("#bSair"); if (s) s.onclick = () => { SJP.sair(); location.reload(); };
+}
+
+// ---------------------------------------------------------- detalhe da missão
+async function detalhe(id) {
+  const t = await SJP.get("/api/v1/tarefas/" + id), a = t.acoes;
+  const imp = t.impedimentos.find(i => !i.resolvido_em);
+  const c = $("#cont");
+  c.innerHTML = `<button class="sec" id="voltar">← Voltar</button><h1 style="margin-top:.6rem">${esc(t.titulo)}</h1>
+   <p>${chip(t.status)} <span class="peq">${SJP.PRIO[t.prioridade]}</span></p>
+   <div class="card"><p>${esc(t.descricao || "Sem descrição.")}</p><p class="peq mut">📍 ${esc(t.local || "—")} · ${esc(t.unidade || "")}<br>👤 ${esc(t.solicitante || "—")} ${esc(t.solicitante_contato || "")}</p>
+   ${t.executores.length > 1 ? `<p class="peq">Equipe: ${t.executores.map(x => esc(x.nome)).join(", ")}</p>` : ""}</div>
+   ${imp ? `<div class="alerta erro"><b>⛔ Bloqueada:</b> ${esc(SJP.IMP[imp.tipo] || imp.tipo)} — ${esc(imp.descricao)}<br><span class="peq">Aguardando o gestor. Você pode registrar andamento.</span></div>` : ""}
+   ${t.status === "CONCLUIDA_EXECUTOR" ? '<div class="alerta">⏳ Você concluiu. Falta o solicitante confirmar — os pontos restantes saem após a confirmação.</div>' : ""}
+   <div class="acoes">
+     ${a.includes("iniciar") ? '<button class="grande ok" id="aIni">▶️ Iniciar atendimento</button>' : ""}
+     ${a.includes("andamento") ? '<button class="grande sec" id="aAnd">📝 Registrar andamento / foto</button>' : ""}
+     ${a.includes("concluir") ? '<button class="grande" id="aCon">✅ Concluir missão</button>' : ""}
+     ${a.includes("impedimento") ? '<button class="grande sec" id="aImp" style="border-color:var(--err);color:var(--err)">⛔ Não consigo continuar</button>' : ""}
+     ${a.includes("apoio") ? '<button class="grande sec" id="aApo">🤝 Pedir apoio de colega</button>' : ""}
+   </div>
+   <h2>Histórico</h2><ul class="tl">${t.eventos.slice().reverse().map(e => `<li class="${e.tipo.includes("imped") ? "imp" : ""}"><b>${esc(e.ator)}</b> <span class="peq mut">${fdt(e.criado_em)}</span><br>${esc(e.texto)}</li>`).join("")}</ul>`;
+  c.scrollIntoView(); $("#voltar").onclick = () => desenhar();
+  const recarregar = () => detalhe(id);
+  const arq = '<label for="fo">Foto (opcional)</label><input id="fo" name="arquivos" type="file" accept="image/*" capture="environment" multiple>';
+  const comArq = async (caminho, fd) => { await SJP.req("POST", caminho, fd); };
+
+  if ($("#aIni")) $("#aIni").onclick = async () => {
+    $("#aIni").disabled = true; $("#aIni").textContent = "Obtendo localização…";
+    const pos = await new Promise(r => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => r(p.coords), () => r(null), { timeout: 6000, maximumAge: 60000 }) : r(null));
+    try { const r = await enviar("POST", `/api/v1/tarefas/${id}/iniciar`, { lat: pos?.latitude ?? null, lon: pos?.longitude ?? null }, true);
+      toast(r ? "Atendimento iniciado ▶️" : "Início guardado."); r ? recarregar() : desenhar(); } catch (e) { toast(e.message); $("#aIni").disabled = false; }
+  };
+  if ($("#aAnd")) $("#aAnd").onclick = () => modal("Registrar andamento", `<label for="tx">O que foi feito?</label><textarea id="tx" name="texto" required></textarea>${arq}`, "Registrar", async fd => {
+    await comArq(`/api/v1/tarefas/${id}/andamento`, limparArq(fd)); toast("Andamento registrado."); recarregar(); });
+  if ($("#aCon")) $("#aCon").onclick = () => modal("Concluir missão", `<label for="ds">Descreva o que foi entregue</label><textarea id="ds" name="descricao" required></textarea>${arq}<p class="peq mut">O solicitante será convidado a confirmar. Seus pontos finais dependem da confirmação e da nota.</p>`, "Concluir", async fd => {
+    await comArq(`/api/v1/tarefas/${id}/concluir`, limparArq(fd)); toast("Missão concluída! 🎉 Aguardando confirmação."); recarregar(); });
+  if ($("#aImp")) $("#aImp").onclick = () => modal("O que está impedindo?", `<label for="ti">Motivo</label><select id="ti" name="tipo">${Object.entries(SJP.IMP).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select><label for="di">Explique</label><textarea id="di" name="descricao" required></textarea>${arq}<p class="peq mut">Registrar um impedimento justificado não prejudica sua pontuação.</p>`, "Avisar gestor", async fd => {
+    await comArq(`/api/v1/tarefas/${id}/impedimento`, limparArq(fd)); toast("Gestor avisado."); recarregar(); });
+  if ($("#aApo")) $("#aApo").onclick = () => modal("Pedir apoio", '<label for="ap">Do que você precisa?</label><textarea id="ap" name="texto" required></textarea>', "Pedir", async fd => {
+    const r = await enviar("POST", `/api/v1/tarefas/${id}/apoio`, { texto: fd.get("texto") }, true); toast(r ? "Pedido enviado ao gestor." : "Pedido guardado."); recarregar(); });
+}
+function limparArq(fd) { const novo = new FormData(); for (const [k, v] of fd.entries()) { if (k === "arquivos" && !(v instanceof File && v.size)) continue; novo.append(k, v); } return novo; }
+
+iniciar();
+</script>
+</body>
+</html>

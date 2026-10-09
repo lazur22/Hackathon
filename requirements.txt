@@ -1,0 +1,7 @@
+# Todas as dependências são open source (licenças permissivas) e instaláveis offline via espelho de pacotes.
+fastapi==0.143.0            # MIT
+uvicorn[standard]==0.54.0   # BSD-3
+SQLAlchemy==2.1.4           # MIT
+httpx==0.28.1               # BSD-3
+python-multipart==0.0.32    # Apache-2.0
+pywebpush==2.5.0            # MPL-2.0 (opcional: Web Push; o app funciona sem ele via SSE)
