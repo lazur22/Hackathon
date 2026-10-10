@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import BASE_DIR, OUTBOX_INTERVALO_S, SEED_ON_START, UPLOAD_DIR
 from .db import Base, SessionLocal, engine, garantir_colunas
-from .routers import auth, cadastros, gamificacao, indicadores, integracao, notificacoes, os_rota_chat, tarefas, validar
+from .routers import auth, cadastros, demo, gamificacao, indicadores, integracao, notificacoes, os_rota_chat, tarefas, validar
 from .seed import semear
 from .services import outbox
 from .services.erros import ErroNegocio
@@ -56,7 +56,7 @@ async def _erro_negocio(_: Request, e: ErroNegocio):
     return JSONResponse({"detail": e.mensagem}, status_code=e.status)
 
 
-for r in (auth, cadastros, tarefas, validar, integracao, gamificacao, indicadores, notificacoes, os_rota_chat):
+for r in (auth, cadastros, tarefas, validar, integracao, gamificacao, indicadores, notificacoes, os_rota_chat, demo):
     app.include_router(r.router)
 
 
@@ -67,6 +67,12 @@ def saude():
 
 @app.get("/", include_in_schema=False)
 def inicio():
+    """O link compartilhável abre direto a Bancada (versão guiada para avaliação)."""
+    return RedirectResponse("/bancada/")
+
+
+@app.get("/inicio", include_in_schema=False)
+def inicio_antigo():
     return FileResponse(BASE_DIR / "web" / "launcher.html")
 
 
@@ -86,6 +92,7 @@ def service_worker():
                         headers={"Service-Worker-Allowed": "/m/"})
 
 
+app.mount("/bancada", StaticFiles(directory=BASE_DIR / "bancada", html=True), name="bancada")
 app.mount("/web", StaticFiles(directory=BASE_DIR / "web", html=True), name="web")
 app.mount("/m", StaticFiles(directory=BASE_DIR / "mobile", html=True), name="mobile")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "validar"), name="static_validar")

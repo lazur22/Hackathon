@@ -22,3 +22,6 @@ VAPID_FILE = BASE_DIR / "data" / "vapid.json"
 VAPID_CONTATO = os.getenv("VAPID_CONTATO", "mailto:simot@sjp.pr.gov.br")
 
 SEED_ON_START = os.getenv("SEED_ON_START", "1") == "1"
+
+# Demonstração: permite reiniciar os dados fictícios pela tela "Bancada" (desligue com DEMO_RESET=0 fora de demos).
+DEMO_RESET = os.getenv("DEMO_RESET", "1") == "1"
